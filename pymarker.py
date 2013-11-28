@@ -7,30 +7,44 @@ class Marker(object):
         self.rect = ((0,0),(0,0))
         self.line = ((0,0),(0,0))
         
+        self.mode = 'l'
+        
         self.objs = list()
         
     def set_img(self, img):
         self.img     = img
         self.overlay = img.copy()
     
+    def set_mode(self, mode):
+        self.mode = mode
+    
     def on_mouse(self, event, x, y, flag, params):
         if event == cv2.EVENT_LBUTTONDOWN:
             self.drawing = True
-            self.rect[0] = (x, y)
+            if self.mode == 'l':
+                self.line[0] = (x, y)
+            elif self.mode == 'r':
+                self.rect[0] = (x, y)
         elif event == cv2.EVENT_MOUSEMOVE:
             if self.drawing is True:
-                cv2.rectangle(self.overlay, self.rect[0], self.rect[1], (0,255,255))
+                if self.mode == 'l':
+                    cv2.line(self.overlay, self.line[0], self.line[1], (0,255,255))
+                elif self.mode == 'r':
+                    cv2.rectangle(self.overlay, self.rect[0], self.rect[1], (0,255,255))
+            elif self.dragging is True:
+                pass
         elif event == cv2.EVENT_LBUTTONUP:
             self.drawing = False
-            self.rect[1] = (x, y)
-            cv2.rectangle(self.overlay, self.rect[0], self.rect[1], (0,255,255))
+            if self.mode == 'l':
+                self.line[1] = (x, y)
+                cv2.line(self.overlay, self.line[0], self.line[1], (0,255,255))
+            elif self.mode == 'r':
+                self.rect[1] = (x, y)
+                cv2.rectangle(self.overlay, self.rect[0], self.rect[1], (0,255,255))
         elif event == cv2.EVENT_RBUTTONDOWN:
-            self.drawing = True
-            self.line[0] = (x, y)
+            self.dragging = True
         elif event == cv2.EVENT_RBUTTONUP:
-            self.drawing = False
-            self.line[1] = (x, y)
-            cv2.line(self.overlay, self.line[0], self.line[1], (0,255,255))
+            self.dragging = False
             
     def clear(self):
         self.rect = ((0,0),(0,0))
@@ -51,10 +65,12 @@ if __name__=="__main__":
     marker  = Marker()
     cv2.setMouseCallback(window_name, marker.on_mouse, None)
     
+    buf     = list()
+    
     while True:
-        buf = cap.read()[1]
-
-        img = buf.copy()
+        img = cap.read()[1]
+        buf.append(img.copy());
+        
         cv2.imshow(window_name, img)
         marker.set_img(img)
         
