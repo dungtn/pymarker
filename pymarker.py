@@ -1,94 +1,93 @@
 import cv2
 import sqlite3
 
-class Marker(object):
+from itertools import izip
+
+def on_mouse(self, event, x, y, flag, marks):
+    if event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_LBUTTONUP:
+        marks.append((x, y, 'r'))
+    elif event == cv2.EVENT_MOUSEMOVE:
+        _, _, shape = marks.pop()
+        marks.append((x, y, shape))
+    elif event == cv2.EVENT_RBUTTONDOWN or event == cv2.EVENT_RBUTTONUP:
+        marks.append((x, y, 'l'))
+
+def pairwise(iterable):
+    a = iter(iterable)
+    return izip(a, a)
+
+def grouped(iterable, n):
+    return izip(*[iter(iterable)]*n)
+
+def mark_img(img, marks):
+    buf = img.copy()
+    for (x0, y0, shape), (x1, y1, shape) in pairwise(marks):
+        if shape == 'r':
+            cv2.rectangle(buf, (x0, y0), (x1, y1), (0,255,255))
+        elif shape == 'l':
+            cv2.line(buf, (x0, y0), (x1, y1), (0,255,255))
+    return buf
+
+def save_all(img_id, marks, labels, store):
+    c = store.cursor()
     
-    def __init__(self):
-        self.rect = ((0,0),(0,0))
-        self.line = ((0,0),(0,0))
-        
-        self.mode = 'l'
-        
-        self.objs = list()
-        
-    def set_img(self, img):
-        self.img     = img
-        self.overlay = img.copy()
-    
-    def set_mode(self, mode):
-        self.mode = mode
-    
-    def on_mouse(self, event, x, y, flag, params):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            self.drawing = True
-            if self.mode == 'l':
-                self.line[0] = (x, y)
-            elif self.mode == 'r':
-                self.rect[0] = (x, y)
-        elif event == cv2.EVENT_MOUSEMOVE:
-            if self.drawing is True:
-                if self.mode == 'l':
-                    cv2.line(self.overlay, self.line[0], self.line[1], (0,255,255))
-                elif self.mode == 'r':
-                    cv2.rectangle(self.overlay, self.rect[0], self.rect[1], (0,255,255))
-            elif self.dragging is True:
-                pass
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.drawing = False
-            if self.mode == 'l':
-                self.line[1] = (x, y)
-                cv2.line(self.overlay, self.line[0], self.line[1], (0,255,255))
-            elif self.mode == 'r':
-                self.rect[1] = (x, y)
-                cv2.rectangle(self.overlay, self.rect[0], self.rect[1], (0,255,255))
-        elif event == cv2.EVENT_RBUTTONDOWN:
-            self.dragging = True
-        elif event == cv2.EVENT_RBUTTONUP:
-            self.dragging = False
-            
-    def clear(self):
-        self.rect = ((0,0),(0,0))
-        self.line = ((0,0),(0,0))
-        
-    def clear_all(self):
-        self.objs = list()
-            
+    objects = list()
+    for (p0, p1, p2, p3),label in zip(grouped(marks,4), labels):
+        x0, y0, shape = p0
+        x1, y1, _     = p1
+        x2, y2, _     = p2
+        x3, y3, _     = p3
+        if shape == 'r':
+            list.append((img_id,x0,y0,x1,y1,x2,y2,x3,y3,label))
+        elif shape == 'l':
+            list.append((img_id,x2,y2,x3,y3,x0,y0,x1,y1,label))
+
+    c.executemany("INSERT INTO objects VALUES (?,?,?,?,?,?,?,?,?,?)", objects)
+    store.commit()
+
 if __name__=="__main__":
     window_name = "Object Marker v0.1"
     input_path  = raw_input("Enter path to input directory: ")
     output_path = raw_input("Enter path to output database: ")
     
     cap     = cv2.VideoCapture(input_path)
-    db      = sqlite3.connect(output_path)
+    store   = sqlite3.connect(output_path)
+    marks   = list()
+    labels  = list()
     counter = 0
 
-    marker  = Marker()
-    cv2.setMouseCallback(window_name, marker.on_mouse, None)
-    
-    buf     = list()
+    cv2.setMouseCallback(window_name, on_mouse, marks)
     
     while True:
-        img = cap.read()[1]
-        buf.append(img.copy());
+        img    = cap.read()[1]
+        marks  = []
+        labels = []
         
-        cv2.imshow(window_name, img)
-        marker.set_img(img)
-        
-        key = cv2.waitKey(100) & 0xff
-        if key == 27:         # Stop if ESC is pressed
-            break
-        elif key == ord('s'): # Skip this image
-            print "Skip frame no. " + counter
-        elif key == ord('l'): # Add object marked line
-            pass
-        elif key == ord('r'): # Add object marked rectangle
-            pass
-        elif key == ord('z'): # Clear all unsaved
-            marker.clear()
-        elif key == ord('c'): # Clear all
-            marker.clearall()
-        elif key == ord(' '): # Save all and next
-            pass
-        elif int(key) in range(0,10): # Labeling last marked object
-            pass
+        while True:
+            marked = mark_img(img, marks)
+            cv2.imshow(window_name, marked)
+            
+            key = cv2.waitKey(100) & 0xff
+            if key == 27:         # Stop if ESC is pressed
+                return
+            elif key == ord('x'): # Skip this image
+                print "Skip frame no. " + counter
+                break
+            elif key == ord('d'): # Delete last mark
+                marks = marks[:-2]
+            elif key == ord('r'): # Remove last label
+                labels  = labels[:-1]
+            elif key == ord('c'): # Clear all
+                marks = []
+                labels  = []
+            elif key == ord('s'): # Save all
+                save_all(counter, marks, labels, store)
+                img = marked
+                marks = []
+            elif key == ord(' '): # Save all and next
+                save_all(counter, marks, labels, store)
+                break
+            elif int(key) in range(0,10): # Labeling last object
+                labels.append(int(key))
         counter += 1
+    store.close()
