@@ -6,18 +6,19 @@ from itertools import izip
 
 def on_mouse(event, x, y, flag, params):
     global is_drawing, marks
-    if event == cv2.EVENT_MBUTTONDOWN:
+    if event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_RBUTTONDOWN:
         is_drawing = True
-    if event == cv2.EVENT_MBUTTONUP:
+    if event == cv2.EVENT_LBUTTONUP or event == cv2.EVENT_RBUTTONUP:
         is_drawing = False
-    if event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_LBUTTONUP:
+    if event == cv2.EVENT_LBUTTONDOWN:
         marks.append((x, y, 'r'))
-    elif event == cv2.EVENT_MOUSEMOVE and is_drawing:
-        if len(marks) % 2 == 0:
-            _, _, shape = marks.pop()
-            marks.append((x, y, shape))
-    elif event == cv2.EVENT_RBUTTONDOWN or event == cv2.EVENT_RBUTTONUP:
+    elif event == cv2.EVENT_RBUTTONDOWN:
         marks.append((x, y, 'l'))
+    elif event == cv2.EVENT_MOUSEMOVE and is_drawing:
+        _, _, shape = marks[-1]
+        if len(marks) % 2 == 0:
+            marks.pop()
+        marks.append((x, y, shape))
 
 def pairwise(iterable):
     a = iter(iterable)
@@ -39,17 +40,17 @@ def save_all(img_id, marks, labels, store):
     c = store.cursor()
     
     objects = list()
-    for (p0, p1, p2, p3),label in zip(grouped(marks,4), labels):
+    for (p0, p1, p2, p3),label in izip(grouped(marks,4), labels):
         x0, y0, shape = p0
         x1, y1, _     = p1
         x2, y2, _     = p2
         x3, y3, _     = p3
         if shape == 'r':
-            list.append((img_id,x0,y0,x1,y1,x2,y2,x3,y3,label))
+            objects.append((img_id,x0,y0,x1,y1,x2,y2,x3,y3,label))
         elif shape == 'l':
-            list.append((img_id,x2,y2,x3,y3,x0,y0,x1,y1,label))
+            objects.append((img_id,x2,y2,x3,y3,x0,y0,x1,y1,label))
 
-    c.executemany("INSERT INTO objects VALUES (?,?,?,?,?,?,?,?,?,?)", objects)
+    c.executemany("""INSERT INTO Objects VALUES (?,?,?,?,?,?,?,?,?,?)""", objects)
     store.commit()
 
 marks = list()
@@ -62,12 +63,22 @@ if __name__=="__main__":
     
     cap     = cv2.VideoCapture(input_path)
     store   = sqlite3.connect(output_path)
+    cursor  = store.cursor()
     labels  = list()
     counter = 0
 
     cv2.namedWindow(window_name)
     cv2.setMouseCallback(window_name, on_mouse, None)
-
+    
+    cursor.execute("""CREATE TABLE IF NOT EXISTS Objects( 
+                                           img_id INT NOT NULL,
+                                           box_sx REAL, box_sy REAL, 
+                                           box_ex REAL, box_ey REAL, 
+                                           line_sx REAL, line_sy REAL, 
+                                           line_ex REAL, line_ey REAL, 
+                                           label INT)""")
+    store.commit()
+    
     while True:
         img    = cap.read()[1]
         marks  = []
@@ -99,7 +110,8 @@ if __name__=="__main__":
             elif key == ord(' '): # Save all and next
                 save_all(counter, marks, labels, store)
                 break
-            elif int(key) in range(0,10): # Labeling last object
-                labels.append(int(key))
+            elif key-48 in range(0,10): # Labeling last object
+                print "Last object is of type %d" % (key-48)
+                labels.append(key-48)
         counter += 1
     store.close()
