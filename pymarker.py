@@ -1,14 +1,21 @@
+import sys
 import cv2
 import sqlite3
 
 from itertools import izip
 
-def on_mouse(self, event, x, y, flag, marks):
+def on_mouse(event, x, y, flag, params):
+    global is_drawing, marks
+    if event == cv2.EVENT_MBUTTONDOWN:
+        is_drawing = True
+    if event == cv2.EVENT_MBUTTONUP:
+        is_drawing = False
     if event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_LBUTTONUP:
         marks.append((x, y, 'r'))
-    elif event == cv2.EVENT_MOUSEMOVE:
-        _, _, shape = marks.pop()
-        marks.append((x, y, shape))
+    elif event == cv2.EVENT_MOUSEMOVE and is_drawing:
+        if len(marks) % 2 == 0:
+            _, _, shape = marks.pop()
+            marks.append((x, y, shape))
     elif event == cv2.EVENT_RBUTTONDOWN or event == cv2.EVENT_RBUTTONUP:
         marks.append((x, y, 'l'))
 
@@ -45,6 +52,9 @@ def save_all(img_id, marks, labels, store):
     c.executemany("INSERT INTO objects VALUES (?,?,?,?,?,?,?,?,?,?)", objects)
     store.commit()
 
+marks = list()
+is_drawing = False
+
 if __name__=="__main__":
     window_name = "Object Marker v0.1"
     input_path  = raw_input("Enter path to input directory: ")
@@ -52,17 +62,18 @@ if __name__=="__main__":
     
     cap     = cv2.VideoCapture(input_path)
     store   = sqlite3.connect(output_path)
-    marks   = list()
     labels  = list()
     counter = 0
 
-    cv2.setMouseCallback(window_name, on_mouse, marks)
+    cv2.namedWindow(window_name)
+    cv2.setMouseCallback(window_name, on_mouse, None)
 
     while True:
-
         img    = cap.read()[1]
         marks  = []
         labels = []
+        
+        is_drawing = False
         
         while True:
             marked = mark_img(img, marks)
@@ -70,9 +81,9 @@ if __name__=="__main__":
             
             key = cv2.waitKey(100) & 0xff
             if key == 27:         # Stop if ESC is pressed
-                return
+                sys.exit()
             elif key == ord('x'): # Skip this image
-                print "Skip frame no. " + counter
+                print "Skip frame no. %d" % counter
                 break
             elif key == ord('d'): # Delete last mark
                 marks = marks[:-2]
