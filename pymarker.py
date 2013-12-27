@@ -36,7 +36,7 @@ def mark_img(img, marks):
             cv2.line(buf, (x0, y0), (x1, y1), (0,255,255))
     return buf
 
-def save_all(img_id, marks, labels, store):
+def save_all(img_id, seq_id, marks, labels, store):
     c = store.cursor()
     
     objects = list()
@@ -46,12 +46,13 @@ def save_all(img_id, marks, labels, store):
         x2, y2, _     = p2
         x3, y3, _     = p3
         if shape == 'r':
-            objects.append((img_id,x0,y0,x1,y1,x2,y2,x3,y3,label))
+            objects.append((img_id,seq_id,x0,y0,x1,y1,x2,y2,x3,y3,label))
         elif shape == 'l':
-            objects.append((img_id,x2,y2,x3,y3,x0,y0,x1,y1,label))
+            objects.append((img_id,seq_id,x2,y2,x3,y3,x0,y0,x1,y1,label))
 
-    c.executemany("""INSERT INTO Objects VALUES (?,?,?,?,?,?,?,?,?,?)""", objects)
+    c.executemany("""INSERT INTO Objects VALUES (?,?,?,?,?,?,?,?,?,?,?)""", objects)
     store.commit()
+    print "Saved!"
 
 marks = list()
 is_drawing = False
@@ -59,6 +60,7 @@ is_drawing = False
 if __name__=="__main__":
     window_name = "Object Marker v0.1"
     input_path  = raw_input("Enter path to input directory: ")
+    sequence_id = raw_input("Enter sequence's id: ")
     output_path = raw_input("Enter path to output database: ")
     
     cap     = cv2.VideoCapture(input_path)
@@ -72,6 +74,7 @@ if __name__=="__main__":
     
     cursor.execute("""CREATE TABLE IF NOT EXISTS Objects( 
                                            img_id INT NOT NULL,
+                                           seq_id INT NOT NULL,
                                            box_sx REAL, box_sy REAL, 
                                            box_ex REAL, box_ey REAL, 
                                            line_sx REAL, line_sy REAL, 
@@ -101,14 +104,15 @@ if __name__=="__main__":
             elif key == ord('r'): # Remove last label
                 labels  = labels[:-1]
             elif key == ord('c'): # Clear all
-                marks = []
-                labels  = []
+                marks  = []
+                labels = []
             elif key == ord('s'): # Save all
-                save_all(counter, marks, labels, store)
-                img = marked
-                marks = []
+                save_all(counter, sequence_id, marks, labels, store)
+                img    = marked
+                marks  = []
+                labels = []
             elif key == ord(' '): # Save all and next
-                save_all(counter, marks, labels, store)
+                save_all(counter, sequence_id, marks, labels, store)
                 break
             elif key-48 in range(0,10): # Labeling last object
                 print "Last object is of type %d" % (key-48)
