@@ -4,6 +4,8 @@ import sqlite3
 
 from itertools import izip
 
+classes = ['Others', 'Motobike', 'Pedestrian', 'Car', 'Truck', 'Bus', 'Bicycle']
+
 def on_mouse(event, x, y, flag, params):
     global is_drawing, marks
     if event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_RBUTTONDOWN:
@@ -27,13 +29,20 @@ def pairwise(iterable):
 def grouped(iterable, n):
     return izip(*[iter(iterable)]*n)
 
-def mark_img(img, marks):
+def mark_img(img, marks, labels):
+    global classes
     buf = img.copy()
     for (x0, y0, shape), (x1, y1, shape) in pairwise(marks):
         if shape == 'r':
             cv2.rectangle(buf, (x0, y0), (x1, y1), (0,255,255))
         elif shape == 'l':
             cv2.line(buf, (x0, y0), (x1, y1), (0,255,255))
+    
+    coords = [(x , y) for (x , y, shape),_ in pairwise(marks) if shape == 'r']
+    font = cv2.FONT_HERSHEY_PLAIN
+    for (x,y),label in izip(coords,labels):
+        cv2.putText(buf, classes[label], (x,y), font, 0.8, (255,0,0), 1, cv2.CV_AA)
+
     return buf
 
 def save_all(img_id, seq_id, marks, labels, store):
@@ -90,7 +99,7 @@ if __name__=="__main__":
         is_drawing = False
         
         while True:
-            marked = mark_img(img, marks)
+            marked = mark_img(img, marks, labels)
             cv2.imshow(window_name, marked)
             
             key = cv2.waitKey(100) & 0xff
@@ -115,7 +124,7 @@ if __name__=="__main__":
                 save_all(counter, sequence_id, marks, labels, store)
                 break
             elif key-48 in range(0,10): # Labeling last object
-                print "Last object is of type %d" % (key-48)
+                x, y, _ = marks[-1]
                 labels.append(key-48)
         counter += 1
     store.close()
