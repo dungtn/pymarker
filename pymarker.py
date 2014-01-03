@@ -4,6 +4,7 @@ import sqlite3
 
 from itertools import izip
 
+font = cv2.FONT_HERSHEY_PLAIN
 classes = ['Others', 'Motobike', 'Pedestrian', 'Car', 'Truck', 'Bus', 'Bicycle']
 
 def on_mouse(event, x, y, flag, params):
@@ -30,7 +31,6 @@ def grouped(iterable, n):
     return izip(*[iter(iterable)]*n)
 
 def mark_img(img, marks, labels):
-    global classes
     buf = img.copy()
     for (x0, y0, shape), (x1, y1, shape) in pairwise(marks):
         if shape == 'r':
@@ -39,7 +39,6 @@ def mark_img(img, marks, labels):
             cv2.line(buf, (x0, y0), (x1, y1), (0,255,255))
     
     coords = [(x , y) for (x , y, shape),_ in pairwise(marks) if shape == 'r']
-    font = cv2.FONT_HERSHEY_PLAIN
     for (x,y),label in izip(coords,labels):
         cv2.putText(buf, classes[label], (x,y), font, 0.8, (255,0,0), 1, cv2.CV_AA)
 
@@ -61,7 +60,6 @@ def save_all(img_id, seq_id, marks, labels, store):
 
     c.executemany("""INSERT INTO Objects VALUES (?,?,?,?,?,?,?,?,?,?,?)""", objects)
     store.commit()
-    print "Saved!"
 
 marks = list()
 is_drawing = False
@@ -92,10 +90,20 @@ if __name__=="__main__":
     store.commit()
     
     while True:
-        img    = cap.read()[1]
+        img = cap.read()[1]
+
+        cursor.execute("SELECT * FROM Objects WHERE img_id=:id", {"id":counter})
+        objs = cursor.fetchall()
+
+        if len(objs) > 0:
+            for obj in objs:
+                obj = map(int, obj)
+                cv2.rectangle(img, (obj[2], obj[3]), (obj[4], obj[5]), (0,255,255))
+                cv2.line(img, (obj[6], obj[7]), (obj[8], obj[9]), (0,255,255))
+                cv2.putText(img, classes[obj[10]], (obj[2],obj[3]), font, 0.8, (255,0,0), 1, cv2.CV_AA)
+            
         marks  = []
         labels = []
-        
         is_drawing = False
         
         while True:
